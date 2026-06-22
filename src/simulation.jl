@@ -18,6 +18,7 @@ mutable struct Simulation{S,A,VS}
     algorithms::A
     steps::Int
     t::Int
+    t_start::Int
     schedulers::VS
     counters::Vector{Int}
     path::String
@@ -31,6 +32,7 @@ mutable struct Simulation{S,A,VS}
     - `algorithms::A`: List of algorithms.
     - `schedulers::VS`: List of schedulers (one for each algorithm).
     - `steps::Int`: Number of MC sweeps.
+    - `t_start::Int=0`: Step to resume from (0 = fresh start).
     - `path::String="data"`: Simulation path.
     - `verbose::Bool=false`: Flag for verbose output.
     """
@@ -39,16 +41,18 @@ mutable struct Simulation{S,A,VS}
         algorithms::A,
         schedulers::VS,
         steps::Int;
+        t_start::Int=0,
         path::String="data",
         verbose::Bool=false
     ) where {S<:AriannaSystem,A,VS}
         @assert length(schedulers) == length(algorithms)
         @assert all(scheduler -> all(x -> 0 ≤ x ≤ steps, scheduler), schedulers)
         @assert all(scheduler -> issorted(scheduler), schedulers)
-        t = 0
-        counters = [findfirst(x -> x > 0, scheduler) for scheduler in schedulers]
+        @assert 0 ≤ t_start < steps
+        t = t_start
+        counters = [findfirst(x -> x > t_start, scheduler) for scheduler in schedulers]
         mkpath(path)
-        return new{S,A,VS}(chains, algorithms, steps, t, schedulers, counters, path, verbose)
+        return new{S,A,VS}(chains, algorithms, steps, t, t_start, schedulers, counters, path, verbose)
     end
 
 end
@@ -65,7 +69,7 @@ Create a new `Simulation` instance from a list of algorithm constructors.
 - `path="data"`: Simulation path.
 - `verbose=false`: Flag for verbose output.
 """
-function Simulation(chains, algorithm_list, steps; path="data", verbose=false)
+function Simulation(chains, algorithm_list, steps; t_start=0, path="data", verbose=false)
     schedulers_tmp = []
     algorithms_tmp = []
     algorithm_names = []
@@ -84,7 +88,7 @@ function Simulation(chains, algorithm_list, steps; path="data", verbose=false)
     end
     schedulers = ntuple(k -> schedulers_tmp[k], length(schedulers_tmp))
     algorithms = ntuple(k -> algorithms_tmp[k], length(algorithms_tmp))
-    return Simulation(chains, algorithms, schedulers, steps; path=path, verbose=verbose)
+    return Simulation(chains, algorithms, schedulers, steps; t_start=t_start, path=path, verbose=verbose)
 end
 
 """
@@ -219,7 +223,7 @@ function run!(simulation::Simulation)
         end
         write_summary(simulation)
         simulation.verbose && println("\033[1;32m\nRUNNING SIMULATION...\033[0m")
-        sim_time = @elapsed for simulation.t in 1:simulation.steps
+        sim_time = @elapsed for simulation.t in (simulation.t_start + 1):simulation.steps
             for k in eachindex(simulation.algorithms)
                 if simulation.t == simulation.schedulers[k][simulation.counters[k]]
                     make_step!(simulation, simulation.algorithms[k])

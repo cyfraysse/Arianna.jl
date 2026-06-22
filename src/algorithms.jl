@@ -86,8 +86,9 @@ struct StoreCallbacks{V} <: AriannaAlgorithm
     files::Vector{Vector{IOStream}}
     store_first::Bool
     store_last::Bool
+    restart::Bool
 
-    function StoreCallbacks(chains, callbacks::V, path; store_first::Bool=true, store_last::Bool=false) where {V}
+    function StoreCallbacks(chains, callbacks::V, path; store_first::Bool=true, store_last::Bool=false, restart::Bool=false) where {V}
         dirs = joinpath.(path, "chains", ["$(c)" for c in eachindex(chains)])
         mkpath.(dirs)
 
@@ -107,31 +108,31 @@ struct StoreCallbacks{V} <: AriannaAlgorithm
             paths[c] = joinpath.(dirs[c], cb_names)
             files[c] = Vector{IOStream}(undef, length(callbacks))
             try
-                files[c] = open.(paths[c], "w")
+                files[c] = open.(paths[c], restart ? "a" : "w")
             catch e
                 rethrow(e)
             end
         end
 
-        return new{V}(callbacks, paths, files, store_first, store_last)
+        return new{V}(callbacks, paths, files, store_first, store_last, restart)
     end
 
 end
 
-function StoreCallbacks(chains; path=missing, callbacks=missing, store_first=true, store_last=false, extras...)
+function StoreCallbacks(chains; path=missing, callbacks=missing, store_first=true, store_last=false, restart=false, extras...)
     if ismissing(callbacks)
         callbacks = []
     end
-    return StoreCallbacks(chains, callbacks, path; store_first=store_first, store_last=store_last)
+    return StoreCallbacks(chains, callbacks, path; store_first=store_first, store_last=store_last, restart=restart)
 end
 
 function initialise(algorithm::StoreCallbacks, simulation::Simulation)
     simulation.verbose && println("Opening callback files...")
-
+    mode = algorithm.restart ? "a" : "w"
     for c in eachindex(algorithm.files)
-        algorithm.files[c] .= open.(algorithm.paths[c], "w")
+        algorithm.files[c] .= open.(algorithm.paths[c], mode)
     end
-    algorithm.store_first && make_step!(simulation, algorithm)
+    algorithm.store_first && !algorithm.restart && make_step!(simulation, algorithm)
     return nothing
 end
 
@@ -203,25 +204,26 @@ struct StoreTrajectories{F<:Format} <: AriannaAlgorithm
     fmt::F
     store_first::Bool
     store_last::Bool
+    restart::Bool
 
-    function StoreTrajectories(chains, path, fmt; store_first::Bool=true, store_last::Bool=false)
+    function StoreTrajectories(chains, path, fmt; store_first::Bool=true, store_last::Bool=false, restart::Bool=false)
         dirs = joinpath.(path, "chains", ["$(c)" for c in eachindex(chains)])
         mkpath.(dirs)
         ext = fmt.extension
         paths = joinpath.(dirs, "trajectory$(ext)")
         files = Vector{IOStream}(undef, length(paths))
         try
-            files = open.(paths, "w")
+            files = open.(paths, restart ? "a" : "w")
         finally
             close.(files)
         end
-        return new{typeof(fmt)}(paths, files, fmt, store_first, store_last)
+        return new{typeof(fmt)}(paths, files, fmt, store_first, store_last, restart)
     end
 
 end
 
-function StoreTrajectories(chains; path=missing, fmt=DAT(), store_first=true, store_last=false, extras...)
-    return StoreTrajectories(chains, path, fmt, store_first=store_first, store_last=store_last)
+function StoreTrajectories(chains; path=missing, fmt=DAT(), store_first=true, store_last=false, restart=false, extras...)
+    return StoreTrajectories(chains, path, fmt, store_first=store_first, store_last=store_last, restart=restart)
 end
 
 """
@@ -236,8 +238,9 @@ end
 
 function initialise(algorithm::StoreTrajectories, simulation::Simulation)
     simulation.verbose && println("Opening trajectory files...")
-    algorithm.files .= open.(algorithm.paths, "w")
-    algorithm.store_first && make_step!(simulation, algorithm)
+    mode = algorithm.restart ? "a" : "w"
+    algorithm.files .= open.(algorithm.paths, mode)
+    algorithm.store_first && !algorithm.restart && make_step!(simulation, algorithm)
     return nothing
 end
 
@@ -307,21 +310,22 @@ Algorithm to create backup files of system states during simulation.
 - `store_first::Bool`: Whether to store backups at initialization
 - `store_last::Bool`: Whether to store backups at finalization
 """
-struct StoreBackups <: AriannaAlgorithm
+struct StoreBackups{F<:Union{Nothing,Function}} <: AriannaAlgorithm
     dirs::Vector{String}
     fmt::Format
     store_first::Bool
     store_last::Bool
-    function StoreBackups(chains, path, fmt; store_first::Bool=false, store_last::Bool=false)
+    on_checkpoint::F  # called as on_checkpoint(t) after each backup; nothing = no-op
+    function StoreBackups(chains, path, fmt; store_first::Bool=false, store_last::Bool=false, on_checkpoint=nothing)
         dirs = joinpath.(path, "chains", ["$(c)" for c in eachindex(chains)])
         mkpath.(dirs)
-        return new(dirs, fmt, store_first, store_last)
+        return new{typeof(on_checkpoint)}(dirs, fmt, store_first, store_last, on_checkpoint)
     end
 
 end
 
-function StoreBackups(chains; path=missing, fmt=DAT(), store_first=false, store_last=false, extras...)
-    return StoreBackups(chains, path, fmt, store_first=store_first, store_last=store_last)
+function StoreBackups(chains; path=missing, fmt=DAT(), store_first=false, store_last=false, on_checkpoint=nothing, extras...)
+    return StoreBackups(chains, path, fmt, store_first=store_first, store_last=store_last, on_checkpoint=on_checkpoint)
 end
 
 store_backup(io, system::AriannaSystem, t, fmt::Format) = store_trajectory(io, system, t, fmt)
@@ -341,6 +345,7 @@ function make_step!(simulation::Simulation, algorithm::StoreBackups)
             store_backup(file, simulation.chains[c], simulation.t, algorithm.fmt)
         end
     end
+    isnothing(algorithm.on_checkpoint) || algorithm.on_checkpoint(simulation.t)
 end
 
 function finalise(algorithm::StoreBackups, simulation::Simulation)
