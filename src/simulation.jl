@@ -46,7 +46,7 @@ mutable struct Simulation{S,A,VS}
         verbose::Bool=false
     ) where {S<:AriannaSystem,A,VS}
         @assert length(schedulers) == length(algorithms)
-        @assert all(scheduler -> all(x -> 0 ≤ x ≤ steps, scheduler), schedulers)
+        @assert all(scheduler -> all(x -> 0 ≤ x, scheduler), schedulers)
         @assert all(scheduler -> issorted(scheduler), schedulers)
         @assert 0 ≤ t_start < steps
         t = t_start
