@@ -518,35 +518,34 @@ struct StoreAcceptance <: AriannaAlgorithm
     paths::Vector{String}
     files::Vector{IOStream}
     ids::Vector{Int}
-    restart::Bool
 
-    function StoreAcceptance(path::String, ids::AbstractVector; restart::Bool=false)
+    function StoreAcceptance(path::String, ids::AbstractVector)
         dirs = joinpath.(path, "moves", ["$(k)" for k in ids])
         mkpath.(dirs)
         paths = joinpath.(dirs, "acceptance.dat")
         files = Vector{IOStream}(undef, length(paths))
         try
-            files = open.(paths, restart ? "a" : "w")
+            files = open.(paths, "w")
         finally
             close.(files)
         end
-        return new(paths, files, ids, restart)
+        return new(paths, files, ids)
     end
 end
 
-function StoreAcceptance(chains::AbstractVector; dependencies=missing, path=missing, ids=missing, restart=false, extras...)
+function StoreAcceptance(chains::AbstractVector; dependencies=missing, path=missing, ids=missing, extras...)
     @assert length(dependencies) == 1
     @assert isa(dependencies[1], Metropolis)
     pool = dependencies[1].pools[1]
     if ismissing(ids)
         ids = collect(eachindex(pool))
     end
-    return StoreAcceptance(path, ids; restart=restart)
+    return StoreAcceptance(path, ids)
 end
 
 function initialise(algorithm::StoreAcceptance, simulation::Simulation)
     simulation.verbose && println("Opening acceptance files...")
-    mode = algorithm.restart ? "a" : "w"
+    mode = simulation.t_start > 0 ? "a" : "w"
     algorithm.files .= open.(algorithm.paths, mode)
     return nothing
 end

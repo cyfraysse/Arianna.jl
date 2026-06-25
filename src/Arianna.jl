@@ -31,6 +31,7 @@ export Simulation, build_schedule, MultiOrigins, run!
 include("algorithms.jl")
 export AriannaAlgorithm, StoreCallbacks, StoreTrajectories, StoreLastFrames, StoreBackups, PrintTimeSteps
 export TXT, DAT
+export read_t_from_lastframe, detect_restart
 
 include("metropolis.jl")
 export Action, Policy, Move, MetropolisRule, BarkerRule
