@@ -76,9 +76,8 @@ function Simulation(chains, algorithm_list, steps; t_start=0, t_restart=nothing,
     alg_list = collect(algorithm_list)
     if !isnothing(t_restart)
         has_lf = any(c -> haskey(c, :algorithm) && c.algorithm === StoreLastFrames, alg_list)
-        if !has_lf
-            push!(alg_list, (algorithm=StoreLastFrames, fmt=DAT()))
-        end
+        has_lf || error("t_restart is set but StoreLastFrames is not in the algorithm list. " *
+                        "Add StoreLastFrames with the format you intend to use for detect_restart.")
     end
     schedulers_tmp = []
     algorithms_tmp = []
