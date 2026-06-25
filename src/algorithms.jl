@@ -106,11 +106,6 @@ struct StoreCallbacks{V} <: AriannaAlgorithm
         for c in eachindex(chains)
             paths[c] = joinpath.(dirs[c], cb_names)
             files[c] = Vector{IOStream}(undef, length(callbacks))
-            try
-                files[c] = open.(paths[c], "w")
-            catch e
-                rethrow(e)
-            end
         end
 
         return new{V}(callbacks, paths, files, store_first, store_last)
@@ -210,11 +205,6 @@ struct StoreTrajectories{F<:Format} <: AriannaAlgorithm
         ext = fmt.extension
         paths = joinpath.(dirs, "trajectory$(ext)")
         files = Vector{IOStream}(undef, length(paths))
-        try
-            files = open.(paths, "w")
-        finally
-            close.(files)
-        end
         return new{typeof(fmt)}(paths, files, fmt, store_first, store_last)
     end
 

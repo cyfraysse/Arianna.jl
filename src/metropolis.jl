@@ -524,11 +524,6 @@ struct StoreAcceptance <: AriannaAlgorithm
         mkpath.(dirs)
         paths = joinpath.(dirs, "acceptance.dat")
         files = Vector{IOStream}(undef, length(paths))
-        try
-            files = open.(paths, "w")
-        finally
-            close.(files)
-        end
         return new(paths, files, ids)
     end
 end
